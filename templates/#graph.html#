@@ -1,0 +1,229 @@
+{% extends "layout.html" %}
+{% block head %}
+{{ super() }}
+<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+<style type='text/css'>
+ .axis path,
+ .axis line {
+     fill: none;
+     stroke: black;
+     shape-rendering: crispEdges;
+ }
+ .axis text {
+     font-family: sans-serif;
+     font-size: 11px;
+ }
+
+.bar {
+  fill: steelblue;
+}
+.bar:hover {
+  fill: turquoise;
+}
+
+.cht-title {
+ font-weight: bold;
+ font-size: 16px;
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+ <div class="row">
+  <div class="col-sm-2"></div>
+   <div class="col-sm-8">
+    <form class="form-horizontal" action="{{ url_for('graph') }}" method=post>
+     <div class="form-group">
+      {{ form.type_drop.label(class="col-sm-3 control-label") }}
+      <div class="col-sm-5">
+       {{ form.type_drop(class="form-control") }}
+      </div>
+     </div>
+     <div class="form-group">
+      {{ form.ind_drop.label(class="col-sm-3 control-label") }}
+      <div class="col-sm-5">
+       {{ form.ind_drop(class="form-control") }}
+      </div>
+     </div>
+     <div class="form-group">
+      {{ form.meas_drop.label(class="col-sm-3 control-label") }}
+      <div class="col-sm-5">
+       {{ form.meas_drop(class="form-control") }}
+      </div>
+     </div>
+     <div class="form-group">
+      <div class="col-sm-offset-3 col-sm-9">
+       {{ form.submit(class="btn btn-default") }}
+      </div>
+     </div>
+    </form>
+  </div>
+  <div class="col-sm-3"></div>
+ </div>
+</div>
+
+
+<script>
+
+ var results = [{{ results | tojson }}];
+ var points = results[0].length;
+ var data = [];
+ var error = []
+
+ if ({{ form.meas_drop.data }} == 0) {
+ for (i=0; i < points; i++){
+  if (results[0][i][1]!="*") {
+   data.push({year:results[0][i][0],est:results[0][i][1]
+   ,cil:results[0][i][2], ciu:results[0][i][3]}); 
+   error.push({year:results[0][i][0],ci:results[0][i][2]});
+   error.push({year:results[0][i][0],ci:results[0][i][3]});
+  } else {
+   data.push({year:results[0][i][0],est:0, cil:0, ciu:0}); 
+   error.push({year:results[0][i][0],ci:0});
+   error.push({year:results[0][i][0],ci:0});
+  }
+ }
+ } else {
+ for (i=0; i < points; i++){
+  if (results[0][i][1]!="*") {
+   data.push({year:results[0][i][0],est:results[0][i][4]
+   ,cil:results[0][i][5], ciu:results[0][i][6]});  
+   error.push({year:results[0][i][0],ci:results[0][i][5]});
+   error.push({year:results[0][i][0],ci:results[0][i][6]});
+  } else {
+   data.push({year:results[0][i][0],est:0, cil:0, ciu:0}); 
+   error.push({year:results[0][i][0],ci:0});
+   error.push({year:results[0][i][0],ci:0});
+  }
+ }
+ }
+
+var margin = {top: 20, right: 30, bottom: 40, left: 40},
+    width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+var x = d3.scale.ordinal()
+    .domain(data.map(function(d) { return d.year; }))
+    .rangeRoundBands([0, width], 0.2);
+
+var y = d3.scale.linear()
+    .domain([0, d3.max(data, function(d) { return d.ciu; })*1.15])
+    .range([height, 0]);
+
+var svg = d3.select('body').append('svg')
+  .attr('width', width)
+  .attr('height', height)
+  .style('display', 'block')
+  .style('margin', '0 auto');
+
+var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+
+var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left");
+
+var chart = svg
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+// Add data
+chart.selectAll(".bar")
+      .data(data)
+      .enter()
+      .append("rect")
+      .attr("class", "bar")
+      .attr("x", function(d) { return x(d.year); })
+      .attr("y", function(d) { return y(d.est); })
+/*
+      .transition().delay(function (d,i){ return i * 100;})
+      .duration(100)
+*/
+      .attr("height", function(d) { return height - y(d.est); })
+      .attr("width", x.rangeBand());
+
+// Add error bars
+var errorBarArea = d3.svg.area()
+    .x(function(d) {return x(d.year)+width/(2.5*points); })
+    .y0(function(d) {return y(d.cil); })
+    .y1(function(d) {return y(d.ciu); })
+    .interpolate("linear");
+
+var errorBars = chart.selectAll("path")
+         .data(data);
+
+errorBars.enter()
+ .append("path");
+
+errorBars.attr("d", function(d){return errorBarArea([d]);}) 
+             //turn the data into a one-element array 
+             //and pass it to the area function
+    .attr("stroke", "black")
+    .attr("stroke-width", 1.5);
+
+var errorBarsHoriz = chart.selectAll("line")
+         .data(error);
+
+errorBarsHoriz.enter()
+ .append("line")
+
+errorBarsHoriz.attr("x1", function(d) {return x(d.year)+15;})
+ .attr("y1", function(d) {return y(d.ci);})
+ .attr("x2", function(d) {return x(d.year)+33;})
+ .attr("y2",  function(d) {return y(d.ci);})
+ .style("stroke", "black")
+ .style("stroke-width", "1.5");
+
+// y axis and label
+chart.append("g")
+    .attr("class", "y axis")
+    .call(yAxis)
+    .append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -height/2)
+    .attr("y", -margin.bottom)
+    .attr("dy", ".71em")
+    .style("text-anchor", "end")
+    .text("");
+
+// x axis and label
+chart.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(xAxis)
+    .append("text")
+    .attr("x", width / 2)
+    .attr("y", margin.bottom - 10)
+    .attr("dy", ".71em")
+    .style("text-anchor", "end")
+    .text("Year");
+
+
+var strTitle = type_drop.options[type_drop.selectedIndex].innerHTML;
+
+if (meas_drop.selectedIndex==0) {
+ var strMeas = "Estimate (thousands)";
+} else {
+ if (type_drop==0) {
+  var strMeas = "Rate per 100 000 workers";
+ } else {
+  var strMeas = "Rate per 100 000 worked in the last 12 months";
+ }
+}
+
+var strTitle = strTitle + ": " + strMeas;
+
+// chart title
+chart.append("text")
+  .text(strTitle)
+  .attr("x", width/2 - strTitle.length*4)
+  .attr("class","cht-title");
+
+</script> 
+
+{% endblock %}
